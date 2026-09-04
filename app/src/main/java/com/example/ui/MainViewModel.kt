@@ -198,14 +198,8 @@ class MainViewModel(
         repository.markAllNotificationsAsRead()
     }
 
-    // Feed account via gateway
-    fun feedAccount(sourceName: String, phone: String, amount: Double, code: String): Boolean {
-        val success = repository.feedWalletViaGateway(sourceName, phone, amount, code)
-        if (success) {
-            showOrderSuccessDialog.value = "تمت تغذية حسابك بنجاح بمبلغ ${formatMoney(amount)} ر.ي عبر $sourceName!"
-        }
-        return success
-    }
+    // التغذية تتطلب قبول الخادم؛ استخدم feedWalletViaServer من واجهة التغذية.
+    fun feedAccount(sourceName: String, phone: String, amount: Double, code: String): Boolean = false
 
     // Telecom payment
     val telecomPackages = repository.telecomPackages
@@ -448,18 +442,10 @@ class MainViewModel(
         repository.toggleFavorite(productId)
     }
 
-    fun depositWallet(amount: Double) {
-        repository.depositToWallet(amount)
-        showDepositDialog.value = false
-    }
+    // العمليات المالية لا تُنفّذ محلياً؛ يجب إرسالها للخادم أولاً.
+    fun depositWallet(amount: Double) {}
 
-    fun transferWallet(recipient: String, amount: Double): Boolean {
-        val success = repository.transferFromWallet(recipient, amount)
-        if (success) {
-            showTransferDialog.value = false
-        }
-        return success
-    }
+    fun transferWallet(recipient: String, amount: Double): Boolean = false
 
     fun checkoutWithWallet(storeName: String, deliveryAddress: String = "", orderNotes: String = ""): Boolean {
         val total = cartTotalYer.value

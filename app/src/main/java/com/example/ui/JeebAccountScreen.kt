@@ -231,20 +231,6 @@ fun JeebAccountScreen(
                         )
 
                         Spacer(modifier = Modifier.height(6.dp))
-
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = Color.White.copy(alpha = 0.2f)
-                        ) {
-                            Text(
-                                text = "حساب موثق رسمي",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    color = Color(0xFFFFD54F),
-                                    fontWeight = FontWeight.Bold
-                                ),
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                            )
-                        }
                     }
                 }
 
@@ -259,7 +245,7 @@ fun JeebAccountScreen(
                             selected = false,
                             onClick = {
                                 coroutineScope.launch { drawerState.close() }
-                                quickServiceMessage = "الملف الشخصي: الاسم ${userSession.fullName} - رقم الحساب ${wallet.accountNumber} - حالة التوثيق: معتمد ومفعل"
+                                quickServiceMessage = "الملف الشخصي: الاسم ${userSession.fullName} - رقم الحساب ${wallet.accountNumber}"
                             },
                             modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                         )
@@ -328,37 +314,6 @@ fun JeebAccountScreen(
                             },
                             modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                         )
-                    }
-
-                    // Role-Based Portals in Side Drawer:
-                    if (userSession.isVendor || userSession.isAdmin) {
-                        item {
-                            NavigationDrawerItem(
-                                icon = { Icon(Icons.Default.ShoppingBag, contentDescription = null, tint = Color(0xFFE65100)) },
-                                label = { Text("لوحة تحكم التاجر 🏪", fontWeight = FontWeight.Bold, color = Color(0xFFE65100)) },
-                                selected = false,
-                                onClick = {
-                                    coroutineScope.launch { drawerState.close() }
-                                    onOpenVendorPortal()
-                                },
-                                modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-                            )
-                        }
-                    }
-
-                    if (userSession.isAdmin) {
-                        item {
-                            NavigationDrawerItem(
-                                icon = { Icon(Icons.Default.Shield, contentDescription = null, tint = Color(0xFF4A148C)) },
-                                label = { Text("لوحة تحكم الإدارة العامة 🛡️", fontWeight = FontWeight.Bold, color = Color(0xFF4A148C)) },
-                                selected = false,
-                                onClick = {
-                                    coroutineScope.launch { drawerState.close() }
-                                    onOpenAdminPortal()
-                                },
-                                modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-                            )
-                        }
                     }
 
                     item {
@@ -636,7 +591,7 @@ fun JeebAccountScreen(
                         ) {
                             Column {
                                 Text(
-                                    text = "الحساب الموثق: ${userSession.fullName}",
+                                    text = userSession.fullName,
                                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, color = Color(0xFF1B5E20))
                                 )
                                 Text(
@@ -656,201 +611,6 @@ fun JeebAccountScreen(
                                     ),
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                 )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Role Status Banner verified from server
-            item {
-                Surface(
-                    color = when {
-                        userSession.isAdmin -> Color(0xFFEDE7F6)
-                        userSession.isVendor -> Color(0xFFFFF3E0)
-                        else -> Color(0xFFE3F2FD)
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = when {
-                                    userSession.isAdmin -> Icons.Default.Shield
-                                    userSession.isVendor -> Icons.Default.ShoppingBag
-                                    else -> Icons.Default.Person
-                                },
-                                contentDescription = null,
-                                tint = when {
-                                    userSession.isAdmin -> Color(0xFF4A148C)
-                                    userSession.isVendor -> Color(0xFFE65100)
-                                    else -> Color(0xFF1565C0)
-                                },
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Text(
-                                text = "صلاحيات الحساب: ${when {
-                                    userSession.isAdmin -> "مدير عام النظام 🛡️"
-                                    userSession.isVendor -> "تاجر ومورد معتمد 🏪"
-                                    else -> "عميل ومشتري 👤"
-                                }}",
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    color = when {
-                                        userSession.isAdmin -> Color(0xFF4A148C)
-                                        userSession.isVendor -> Color(0xFFE65100)
-                                        else -> Color(0xFF1565C0)
-                                    }
-                                )
-                            )
-                        }
-
-                        Surface(
-                            color = Color.White.copy(alpha = 0.85f),
-                            shape = RoundedCornerShape(6.dp)
-                        ) {
-                            Text(
-                                text = "معتمد من الخادم ✅",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    color = Color(0xFF2E7D32),
-                                    fontWeight = FontWeight.Bold
-                                ),
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Role-Based Portals (Admin & Vendor Access)
-            if (userSession.isVendor || userSession.isAdmin) {
-                item {
-                    Card(
-                        shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(42.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFFE65100)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.ShoppingBag,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-                                Column {
-                                    Text(
-                                        text = "لوحة تحكم التاجر 🏪",
-                                        style = MaterialTheme.typography.titleMedium.copy(
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color(0xFFBF360C)
-                                        )
-                                    )
-                                    Text(
-                                        text = "إدارة المنتجات والمبيعات وطلبات الزبائن",
-                                        style = MaterialTheme.typography.bodySmall.copy(color = Color(0xFFE65100))
-                                    )
-                                }
-                            }
-                            Button(
-                                onClick = onOpenVendorPortal,
-                                shape = RoundedCornerShape(8.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE65100))
-                            ) {
-                                Text("دخول", fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (userSession.isAdmin) {
-                item {
-                    Card(
-                        shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFEDE7F6)),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(42.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFF4A148C)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Shield,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-                                Column {
-                                    Text(
-                                        text = "لوحة تحكم الإدارة العامة 🛡️",
-                                        style = MaterialTheme.typography.titleMedium.copy(
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF311B92)
-                                        )
-                                    )
-                                    Text(
-                                        text = "إدارة المتاجر والمنصة وإعدادات الخادم",
-                                        style = MaterialTheme.typography.bodySmall.copy(color = Color(0xFF4A148C))
-                                    )
-                                }
-                            }
-                            Button(
-                                onClick = onOpenAdminPortal,
-                                shape = RoundedCornerShape(8.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4A148C))
-                            ) {
-                                Text("دخول", fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -883,15 +643,6 @@ fun JeebAccountScreen(
                     onOpenGames = onOpenGames,
                     onOpenApps = onOpenPrograms,
                     onOpenAddresses = onOpenAddresses,
-                    onFeedAccountClick = { showFeedAccountModal = true },
-                    onTransferClick = onTransferClick,
-                    onOrdersClick = onOrdersClick
-                )
-            }
-
-            // 4. Quick Account Actions (تغذية الحساب، تحويل مالي، طلباتي)
-            item {
-                AccountQuickButtonsBar(
                     onFeedAccountClick = { showFeedAccountModal = true },
                     onTransferClick = onTransferClick,
                     onOrdersClick = onOrdersClick
