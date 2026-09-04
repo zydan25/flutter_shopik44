@@ -709,160 +709,54 @@ class StoreRepository {
     }
 
     suspend fun checkTransferEligibility(recipientPhone: String, amount: Double, message: String = ""): TransferCheckResult {
-        val current = _walletAccount.value
         val cleanPhone = recipientPhone.trim()
-        if (cleanPhone.isBlank()) {
-            return TransferCheckResult(
-                isAllowed = false,
-                recipientPhone = cleanPhone,
-                amount = amount,
-                message = "يرجى إدخال رقم هاتف المشترك المستلم أولاً"
-            )
+        if (cleanPhone.isBlank() || amount <= 0) {
+            return TransferCheckResult(false, recipientPhone = cleanPhone, amount = amount, message = "أدخل رقم المشترك ومبلغاً صحيحاً.")
         }
-        if (amount <= 0) {
-            return TransferCheckResult(
-                isAllowed = false,
-                recipientPhone = cleanPhone,
-                amount = amount,
-                message = "يرجى تحديد مبلغ تحويل صحيح أكبر من 0 ر.ي"
-            )
+        val token = _userSession.value.token
+        if (token.isNullOrBlank() || token.startsWith("local_")) {
+            return TransferCheckResult(false, recipientPhone = cleanPhone, amount = amount, message = "سجّل الدخول أولاً للتحقق من المشترك عبر الخادم.")
         }
-        if (current.balanceYer < amount) {
-            return TransferCheckResult(
-                isAllowed = false,
-                recipientPhone = cleanPhone,
-                amount = amount,
-                message = "عفواً، رصيدك الحالي (${current.balanceYer.toInt()} ر.ي) غير كافٍ لإتمام التحويل بمبلغ ${amount.toInt()} ر.ي"
-            )
-        }
-
         return withContext(Dispatchers.IO) {
-            var foundName: String? = null
-            var giftId: Int? = null
-            val token = _userSession.value.token
-            if (!token.isNullOrBlank()) {
-                try {
-                    val api = NetworkClient.getApiService(_djangoBaseUrl.value)
-                    val giftPayload = mapOf(
-                        "receiver_phone" to cleanPhone,
-                        "amount" to amount,
-                        "message" to message.ifBlank { "تحويل مالي إلى مشترك" }
-                    )
-                    val giftResp = api.createGift("Token $token", giftPayload)
-                    if (giftResp.isSuccessful && giftResp.body() != null) {
-                        val body = giftResp.body()!!
-                        giftId = (body["id"] as? Number)?.toInt() ?: body["id"]?.toString()?.toIntOrNull()
-                        foundName = body["receiver_name"]?.toString() ?: body["recipient_name"]?.toString() ?: body["receiver_phone"]?.toString()
-                    } else if (giftResp.code() == 404 || giftResp.code() == 400) {
-                        val errStr = giftResp.errorBody()?.string() ?: ""
-                        if (errStr.contains("المحفظة") || errStr.contains("غير موجود") || errStr.contains("not found", ignoreCase = true)) {
-                            return@withContext TransferCheckResult(
-                                isAllowed = false,
-                                recipientPhone = cleanPhone,
-                                amount = amount,
-                                message = "المشترك المطلوب غير موجود في النظام؛ يرجى التأكد من صحة رقم الهاتف."
-                            )
-                        } else if (errStr.contains("الرصيد") || errStr.contains("insufficient", ignoreCase = true)) {
-                            return@withContext TransferCheckResult(
-                                isAllowed = false,
-                                recipientPhone = cleanPhone,
-                                amount = amount,
-                                message = "عفواً، رصيدك في الخادم غير كافٍ لإتمام التحويل."
-                            )
-                        }
-                    }
-                } catch (_: Exception) {}
-            }
-
-            if (foundName.isNullOrBlank()) {
-                foundName = when {
-                    cleanPhone.endsWith("456") -> "زيدان العطاب"
-                    cleanPhone.endsWith("789") -> "أحمد مصلح الشامي"
-                    cleanPhone.endsWith("111") -> "محمد عبدالملك اليماني"
-                    cleanPhone.endsWith("222") -> "عبدالرحمن سنان"
-                    cleanPhone.endsWith("333") -> "خالد الورداني"
-                    cleanPhone.endsWith("444") -> "ياسر القدسي"
-                    cleanPhone.endsWith("555") -> "سامي الصلوي"
-                    cleanPhone.length in 9..12 -> "مشترك معتمد (${cleanPhone})"
-                    else -> null
-                }
-            }
-
-            if (foundName == null) {
-                return@withContext TransferCheckResult(
-                    isAllowed = false,
-                    recipientPhone = cleanPhone,
-                    amount = amount,
-                    message = "المشترك غير مسجل في النظام، يرجى التأكد من صحة رقم الهاتف المدخل."
+            try {
+                val response = NetworkClient.getApiService(_djangoBaseUrl.value).createGift(
+                    "Token $token",
+                    mapOf("receiver_phone" to cleanPhone, "amount" to amount, "message" to message.ifBlank { "تحويل مالي إلى مشترك" })
                 )
+                val body = response.body()
+                val recipientName = body?.get("receiver_name")?.toString()
+                    ?: body?.get("recipient_name")?.toString()
+                val giftId = (body?.get("id") as? Number)?.toInt() ?: body?.get("id")?.toString()?.toIntOrNull()
+                if (response.isSuccessful && !recipientName.isNullOrBlank() && giftId != null) {
+                    TransferCheckResult(true, recipientName, cleanPhone, amount, 0.0, giftId, "تم التحقق من اسم المشترك عبر الخادم. راجع العملية ثم أكّدها.")
+                } else {
+                    TransferCheckResult(false, recipientPhone = cleanPhone, amount = amount, message = "تعذر التحقق من المشترك عبر الخادم: ${response.errorBody()?.string()?.take(160) ?: "استجابة غير مكتملة"}")
+                }
+            } catch (e: Exception) {
+                TransferCheckResult(false, recipientPhone = cleanPhone, amount = amount, message = "تعذر الاتصال بالخادم للتحقق من المشترك: ${e.localizedMessage ?: "خطأ شبكة"}")
             }
-
-            TransferCheckResult(
-                isAllowed = true,
-                recipientName = foundName,
-                recipientPhone = cleanPhone,
-                amount = amount,
-                fee = 0.0,
-                giftId = giftId,
-                message = "تم العثور على المشترك ورصيدك كافٍ. يرجى مراجعة التفاصيل أدناه وتأكيد العملية أو التراجع."
-            )
         }
     }
 
     suspend fun confirmTransfer(
-        giftId: Int?,
-        recipientPhone: String,
-        recipientName: String,
-        amount: Double
+        giftId: Int?, recipientPhone: String, recipientName: String, amount: Double
     ): Pair<Boolean, WalletTransaction?> {
-        val current = _walletAccount.value
-        if (current.balanceYer < amount) return Pair(false, null)
-
-        _walletAccount.value = current.copy(balanceYer = current.balanceYer - amount)
-        val txId = "TR-${(100000..999999).random()}"
-        val sdf = SimpleDateFormat("yyyy/MM/dd hh:mm a", Locale.forLanguageTag("ar"))
-        val dateStr = sdf.format(Date())
-
-        val newTx = WalletTransaction(
-            id = txId,
-            title = "تحويل مالي إلى $recipientName",
-            type = "TRANSFER",
-            amount = amount,
-            currency = "ر.ي",
-            date = dateStr,
-            isPositive = false,
-            recipientName = recipientName,
-            recipientPhone = recipientPhone,
-            referenceCode = "TXN-$txId",
-            status = "ناجحة ومكتملة ✅",
-            fee = 0.0,
-            notes = "تم تأكيد التحويل المالي الفوري للمشترك بنجاح"
-        )
-        _transactions.value = listOf(newTx) + _transactions.value
-
         val token = _userSession.value.token
-        if (!token.isNullOrBlank()) {
-            withContext(Dispatchers.IO) {
-                try {
-                    val api = NetworkClient.getApiService(_djangoBaseUrl.value)
-                    if (giftId != null) {
-                        api.confirmGift("Token $token", giftId)
-                    } else {
-                        api.transfer("Token $token", mapOf("phone" to recipientPhone, "amount" to amount))
-                    }
-                } catch (_: Exception) {}
-            }
+        if (giftId == null || token.isNullOrBlank() || token.startsWith("local_")) return Pair(false, null)
+        val response = withContext(Dispatchers.IO) {
+            try { NetworkClient.getApiService(_djangoBaseUrl.value).confirmGift("Token $token", giftId) } catch (_: Exception) { null }
         }
-
-        val notif = AppNotification(
-            id = "n_${System.currentTimeMillis()}",
-            title = "حوالة مالية صادرة بنجاح",
-            message = "تم خصم ${amount.toInt()} ر.ي وتحويلها إلى $recipientName ($recipientPhone). رقم المرجع: $txId",
-            time = "الآن",
-            isRead = false
+        if (response?.isSuccessful != true) return Pair(false, null)
+        val current = _walletAccount.value
+        val newTx = WalletTransaction(
+            id = "TR-$giftId", title = "تحويل مالي إلى $recipientName", type = "TRANSFER", amount = amount,
+            currency = "ر.ي", date = SimpleDateFormat("yyyy/MM/dd hh:mm a", Locale.forLanguageTag("ar")).format(Date()),
+            isPositive = false, recipientName = recipientName, recipientPhone = recipientPhone,
+            referenceCode = "TXN-$giftId", status = "ناجحة ومكتملة ✅", fee = 0.0,
+            notes = "تم تأكيد التحويل من الخادم"
         )
-        _notifications.value = listOf(notif) + _notifications.value
-
+        _walletAccount.value = current.copy(balanceYer = (current.balanceYer - amount).coerceAtLeast(0.0))
+        _transactions.value = listOf(newTx) + _transactions.value
         return Pair(true, newTx)
     }
 
@@ -888,71 +782,22 @@ class StoreRepository {
         return confirmTransfer(null, recipientPhone, recipientName, amount)
     }
 
-    suspend fun feedWalletViaServer(
-        phone: String,
-        amount: Double,
-        code: String,
-        method: String = "floosak",
-        reference: String = ""
-    ): Pair<Boolean, String> {
-        return withContext(Dispatchers.IO) {
-            val token = _userSession.value.token
-            val methodNameArabic = when (method.lowercase()) {
-                "floosak" -> "محفظة فلوسك (CAC Bank)"
-                "jeeb" -> "محفظة جيب (بنك الكريمي)"
-                "jawali" -> "محفظة جوالي (YKB)"
-                "cash" -> "محفظة ون كاش / كاش"
-                "direct" -> "كرت شحن رصيد فوري"
-                else -> method
+    suspend fun feedWalletViaServer(phone: String, amount: Double, code: String, method: String = "floosak", reference: String = ""): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        if (phone.isBlank() || amount <= 0 || code.isBlank()) return@withContext Pair(false, "أدخل رقم الهاتف والمبلغ وكود التغذية.")
+        val token = _userSession.value.token
+        try {
+            val response = NetworkClient.getApiService(_djangoBaseUrl.value).feedAccount(
+                token = token?.takeUnless { it.startsWith("local_") }?.let { "Token $it" },
+                request = mapOf("phone" to phone.trim(), "amount" to amount, "code" to code.trim(), "method" to method, "reference" to reference.trim())
+            )
+            if (!response.isSuccessful || response.body() == null) {
+                Pair(false, response.errorBody()?.string()?.take(200) ?: "رفض الخادم عملية التغذية.")
+            } else {
+                syncWalletFromServer()
+                Pair(true, response.body()!!["message"]?.toString() ?: "قبل الخادم طلب التغذية بنجاح.")
             }
-
-            var serverSuccess = false
-            var serverMessage = ""
-            try {
-                val api = NetworkClient.getApiService(_djangoBaseUrl.value)
-                val resp = api.feedAccount(
-                    token = if (token != null) "Token $token" else null,
-                    request = mapOf(
-                        "phone" to phone.trim(),
-                        "amount" to amount,
-                        "code" to code.trim(),
-                        "method" to method,
-                        "reference" to reference.trim()
-                    )
-                )
-                if (resp.isSuccessful && resp.body() != null) {
-                    serverSuccess = true
-                    serverMessage = resp.body()!!["message"]?.toString() ?: "تمت تغذية الحساب بنجاح عبر $methodNameArabic"
-                }
-            } catch (_: Exception) {}
-
-            // Update balance locally and record transaction
-            val current = _walletAccount.value
-            _walletAccount.value = current.copy(balanceYer = current.balanceYer + amount)
-            val newTx = WalletTransaction(
-                id = "DEP-${(100000..999999).random()}",
-                title = "تغذية عبر $methodNameArabic",
-                type = "DEPOSIT",
-                amount = amount,
-                currency = "ر.ي",
-                date = SimpleDateFormat("yyyy/MM/dd hh:mm a", Locale.forLanguageTag("ar")).format(Date()),
-                isPositive = true,
-                status = "ناجحة ومكتملة ✅",
-                referenceCode = if (reference.isNotBlank()) reference else "REF-${(10000..99999).random()}",
-                notes = "تم إيداع الرصيد بنجاح من حساب $phone"
-            )
-            _transactions.value = listOf(newTx) + _transactions.value
-
-            val notif = AppNotification(
-                id = "n_dep_${System.currentTimeMillis()}",
-                title = "تم إيداع رصيد في المحفظة 💰",
-                message = "تمت إضافة ${amount.toInt()} ر.ي إلى محفظتك بنجاح عبر $methodNameArabic.",
-                time = "الآن",
-                isRead = false
-            )
-            _notifications.value = listOf(notif) + _notifications.value
-
-            Pair(true, if (serverSuccess) serverMessage else "تمت التغذية الذاتية بنجاح! رصيدك الجديد: ${_walletAccount.value.balanceYer.toInt()} ر.ي")
+        } catch (e: Exception) {
+            Pair(false, "تعذر إرسال طلب التغذية إلى الخادم: ${e.localizedMessage ?: "خطأ شبكة"}")
         }
     }
 
@@ -976,23 +821,7 @@ class StoreRepository {
         _notifications.value = _notifications.value.map { it.copy(isRead = true) }
     }
 
-    // Feed wallet via Jeeb or any payment gateway
-    fun feedWalletViaGateway(sourceName: String, phone: String, amount: Double, code: String): Boolean {
-        if (amount <= 0) return false
-        val current = _walletAccount.value
-        _walletAccount.value = current.copy(balanceYer = current.balanceYer + amount)
-        val newTx = WalletTransaction(
-            id = "tx_${System.currentTimeMillis()}",
-            title = "تغذية حسابي عبر $sourceName",
-            type = "DEPOSIT",
-            amount = amount,
-            currency = "ر.ي",
-            date = "الآن",
-            isPositive = true
-        )
-        _transactions.value = listOf(newTx) + _transactions.value
-        return true
-    }
+    // التغذية لا تنفذ محلياً؛ يجب استخدام feedWalletViaServer وموافقة الخادم.
 
     // Pay telecom bill or recharge package
     fun payTelecomRecharge(
@@ -1206,13 +1035,15 @@ class StoreRepository {
                         val itemsPayload = cartItems.map {
                             CreateOrderItemRequest(productId = it.product.id, quantity = it.quantity)
                         }
-                        api.createOrder(
+                        val response = api.createOrder(
                             token = "Token $token",
                             request = CreateOrderRequest(
                                 paymentMethod = "wallet",
+                                shippingAddress = mapOf("address" to finalAddress),
                                 items = itemsPayload
                             )
                         )
+                        if (response.isSuccessful) fetchOrdersFromApi(token)
                     } catch (_: Exception) {}
                 }
             }
@@ -1282,13 +1113,15 @@ class StoreRepository {
                     val itemsPayload = cartItems.map {
                         CreateOrderItemRequest(productId = it.product.id, quantity = it.quantity)
                     }
-                    api.createOrder(
+                    val response = api.createOrder(
                         token = "Token $token",
                         request = CreateOrderRequest(
                             paymentMethod = "cod",
+                            shippingAddress = mapOf("address" to finalAddress),
                             items = itemsPayload
                         )
                     )
+                    if (response.isSuccessful) fetchOrdersFromApi(token)
                 } catch (_: Exception) {}
             }
         }

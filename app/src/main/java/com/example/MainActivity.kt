@@ -321,10 +321,10 @@ fun MainAppScreen(
                         icon = {
                             Icon(
                                 imageVector = Icons.Default.AccountBalanceWallet,
-                                contentDescription = "حسابي"
+                                contentDescription = if (userSession.fullName.isBlank()) "حسابي" else userSession.fullName
                             )
                         },
-                        label = { Text("حسابي", fontWeight = FontWeight.Bold) },
+                        label = { Text(userSession.fullName.ifBlank { "حسابي" }, fontWeight = FontWeight.Bold) },
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = MaterialTheme.colorScheme.primary,
                             selectedTextColor = MaterialTheme.colorScheme.primary,
